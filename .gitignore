@@ -1,0 +1,35 @@
+# ---- Maven ----
+target/
+dist/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.flattened-pom.xml
+target-cp.txt
+
+# ---- IntelliJ IDEA ----
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# ---- Eclipse ----
+.classpath
+.project
+.settings/
+bin/
+
+# ---- VS Code ----
+.vscode/
+
+# ---- 其它 ----
+*.log
+logs/
+.DS_Store
+Thumbs.db

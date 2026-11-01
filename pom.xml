@@ -6,14 +6,18 @@
 
     <groupId>com.buzizi</groupId>
     <artifactId>TabNamePrefix</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>2.0.0</version>
     <packaging>jar</packaging>
 
     <name>TabNamePrefix</name>
 
     <properties>
-        <!-- Paper 1.20.5+ 起要求服务端运行在 Java 21 上,1.21.11 同样如此 -->
-        <java.version>21</java.version>
+        <!--
+          兼容区间: Paper / Spigot 1.16 ~ 26.2
+          1.16 服务端最低可运行在 Java 8 上,因此这里以 Java 8 字节码发布,
+          这样同一份 jar 在 Java 8 / 11 / 16 / 17 / 21 / 25 上都能加载。
+        -->
+        <java.version>8</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -25,9 +29,16 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.14.0</version>
                 <configuration>
-                    <!-- 使用 release 参数同时约束字节码版本与 JDK API,避免误用高版本方法 -->
+                    <!--
+                      release 同时约束字节码版本与 JDK API:
+                      避免误用 Java 9+ 才有的方法,保证插件能在 Java 8 服务端运行。
+                    -->
                     <release>${java.version}</release>
                     <encoding>UTF-8</encoding>
+                    <compilerArgs>
+                        <!-- JDK 21 编译 release 8 时会提示 source/target 过时,这里静默该提示 -->
+                        <arg>-Xlint:-options</arg>
+                    </compilerArgs>
                 </configuration>
             </plugin>
             <plugin>
@@ -53,6 +64,7 @@
     </build>
 
     <repositories>
+        <!-- 同时代理了 Paper 与 Spigot 的构件 -->
         <repository>
             <id>papermc-repo</id>
             <url>https://repo.papermc.io/repository/maven-public/</url>
@@ -64,25 +76,29 @@
     </repositories>
 
     <dependencies>
-        <!-- 目标服务端: Paper 1.21.11 -->
+        <!--
+          编译基线刻意选 1.16.5:插件只会引用 1.16 就存在的 Bukkit API,
+          这样在 1.16 ~ 26.2 的所有服务端上都不会出现 NoSuchMethodError。
+          Paper 专属的 Adventure 接口通过反射调用(见 ListNameBridge)。
+        -->
         <dependency>
-            <groupId>io.papermc.paper</groupId>
-            <artifactId>paper-api</artifactId>
-            <version>1.21.11-R0.1-SNAPSHOT</version>
+            <groupId>org.spigotmc</groupId>
+            <artifactId>spigot-api</artifactId>
+            <version>1.16.5-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
         <!-- 可选集成: PlaceholderAPI(软依赖,运行时未安装则跳过变量解析) -->
         <dependency>
             <groupId>me.clip</groupId>
             <artifactId>placeholderapi</artifactId>
-            <version>2.12.2</version>
+            <version>2.11.6</version>
             <scope>provided</scope>
         </dependency>
         <!-- 可选集成: LuckPerms(软依赖,运行时未安装则退回权限节点匹配),该构件发布在 Maven Central -->
         <dependency>
             <groupId>net.luckperms</groupId>
             <artifactId>api</artifactId>
-            <version>5.5</version>
+            <version>5.4</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>

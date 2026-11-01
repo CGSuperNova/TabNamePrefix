@@ -1,8 +1,6 @@
 package com.buzizi.tabNamePrefix;
 
 import me.clip.placeholderapi.PlaceholderAPI;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.luckperms.api.LuckPermsProvider;
 import net.luckperms.api.model.group.Group;
 import net.luckperms.api.model.user.User;
@@ -29,9 +27,12 @@ public final class TabManager {
     private static final long GROUP_CACHE_TTL_MS = 5000L;
 
     private final TabNamePrefix plugin;
-    private final List<TabEntry> entries = new ArrayList<>();
-    private final Map<UUID, Component> applied = new HashMap<>();
-    private final Map<UUID, CachedGroups> groupCache = new HashMap<>();
+    private final List<TabEntry> entries = new ArrayList<TabEntry>();
+    /** 记录每个玩家当前已写入的 Tab 文本,避免重复发包 */
+    private final Map<UUID, String> applied = new HashMap<UUID, String>();
+    private final Map<UUID, CachedGroups> groupCache = new HashMap<UUID, CachedGroups>();
+    /** 跨版本写入兼容层:Paper 用 Adventure,Spigot 等退回 Bukkit 方法 */
+    private final ListNameBridge listNameBridge = ListNameBridge.create();
 
     private String groupNodePrefix = "tabnameprefix.group.";
     private boolean enabled = true;
@@ -40,6 +41,7 @@ public final class TabManager {
 
     public TabManager(TabNamePrefix plugin) {
         this.plugin = plugin;
+        plugin.getLogger().info("Tab 名称写入方式: " + listNameBridge.describe());
     }
 
     /** 重新读取配置文件并重建内部状态 */
@@ -48,8 +50,11 @@ public final class TabManager {
         FileConfiguration config = plugin.getConfig();
 
         entries.clear();
-        applied.clear();
         groupCache.clear();
+
+        // 注意:这里不清空 applied。
+        // 重载后 refreshAll() 会重新计算每个玩家的文本:
+        // 文本变化则重新写入,条目被删除时则依靠 applied 中记录的状态还原默认名称。
 
         enabled = config.getBoolean("enabled", true);
         groupNodePrefix = config.getString("settings.group-node-prefix", "tabnameprefix.group.");
@@ -115,18 +120,23 @@ public final class TabManager {
         }
 
         String text = TextUtil.colorize(prefix + player.getName() + suffix);
-        Component component = LegacyComponentSerializer.legacySection().deserialize(text);
 
-        Component previous = applied.put(player.getUniqueId(), component);
-        if (!component.equals(previous)) {
-            player.playerListName(component);
+        String previous = applied.get(player.getUniqueId());
+        if (text.equals(previous)) {
+            return;
+        }
+        if (listNameBridge.set(player, text)) {
+            applied.put(player.getUniqueId(), text);
+        } else {
+            // 写入失败时不缓存,下一轮刷新会重试
+            applied.remove(player.getUniqueId());
         }
     }
 
     /** 还原某玩家默认的 Tab 名称(仅当之前被本插件修改过) */
     public void restore(Player player) {
         if (applied.remove(player.getUniqueId()) != null) {
-            player.playerListName(null);
+            listNameBridge.reset(player);
         }
     }
 
@@ -157,7 +167,7 @@ public final class TabManager {
         TabEntry best = null;
         int bestPriority = Integer.MIN_VALUE;
 
-        Set<String> lpGroups = luckPermsAvailable ? lpGroupsOf(player) : Collections.emptySet();
+        Set<String> lpGroups = luckPermsAvailable ? lpGroupsOf(player) : Collections.<String>emptySet();
 
         for (TabEntry entry : entries) {
             if (entry.isFallback()) {
@@ -180,11 +190,11 @@ public final class TabManager {
     private Set<String> lpGroupsOf(Player player) {
         long now = System.currentTimeMillis();
         CachedGroups cached = groupCache.get(player.getUniqueId());
-        if (cached != null && now - cached.at() < GROUP_CACHE_TTL_MS) {
-            return cached.groups();
+        if (cached != null && now - cached.at < GROUP_CACHE_TTL_MS) {
+            return cached.groups;
         }
 
-        Set<String> groups = new HashSet<>();
+        Set<String> groups = new HashSet<String>();
         try {
             User user = LuckPermsProvider.get().getUserManager().getUser(player.getUniqueId());
             if (user != null) {
@@ -205,6 +215,14 @@ public final class TabManager {
         return groups;
     }
 
-    private record CachedGroups(long at, Set<String> groups) {
+    /** LuckPerms 组查询结果缓存(Java 8 环境下不能用 record,因此写成普通类) */
+    private static final class CachedGroups {
+        private final long at;
+        private final Set<String> groups;
+
+        private CachedGroups(long at, Set<String> groups) {
+            this.at = at;
+            this.groups = groups;
+        }
     }
 }

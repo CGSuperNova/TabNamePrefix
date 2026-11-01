@@ -1,0 +1,57 @@
+# Changelog
+
+本项目的所有重要变更都记录在此文件中。
+
+格式遵循 [Keep a Changelog 1.1.0](https://keepachangelog.com/zh-CN/1.1.0/),
+版本号遵循 [语义化版本 2.0.0](https://semver.org/lang/zh-CN/)。
+
+## [Unreleased]
+
+## [2.0.0] - 2026-11-01
+
+### Added
+
+- 新增跨版本写入层 `ListNameBridge`:运行时探测 Paper 的 Adventure
+  `playerListName(Component)` 接口,不可用时自动回退到 Bukkit 的
+  `setPlayerListName(String)`,并通过反射避免编译期依赖 Adventure。
+- 支持 Paper / Spigot `1.16` ~ `26.2` 全版本区间。
+
+### Changed
+
+- 编译目标改为 **Java 8 字节码**(`--release 8`),同一份 jar 可在
+  Java 8 / 11 / 16 / 17 / 21 / 25 的服务端上加载。
+- 编译基线 API 调整为 Spigot API `1.16.5`,插件只引用 1.16 就存在的 Bukkit 接口。
+- PlaceholderAPI 与 LuckPerms API 回归到 1.16 时代的兼容基线(`2.11.6` / `5.4`),
+  运行时与更高版本仍二进制兼容。
+- `plugin.yml` 的 `api-version` 调整为 `1.16`,`version` 改为由 Maven 过滤注入。
+- 项目版本号提升至 `2.0.0`。
+
+### Fixed
+
+- 重载配置时不再丢失已应用状态的记录:若某玩家原先命中的条目被删除且没有兜底条目,
+  重载 / 禁用插件后会正确还原其默认 Tab 名称,而不是残留旧前缀。
+
+### Removed
+
+- 移除对 `net.kyori.adventure` 的编译期依赖(改为运行时反射)。
+- 移除 Java 16 的 `record` 语法,改用普通内部类,以兼容 Java 8 运行时。
+
+## [1.1.0] - 2026-11-01
+
+### Changed
+
+- 适配 Paper 1.21.11:`paper-api` 升级至 `1.21.11-R0.1-SNAPSHOT`,编译目标 Java 21。
+- `plugin.yml` 的 `api-version` 调整为 `1.21`。
+- 移除对已废弃 `ChatColor` 的依赖,颜色代码转换改为内部实现,输出与原实现完全一致。
+- 使用 `getPluginMeta()` 替代已废弃的 `getDescription()`。
+- PlaceholderAPI 升级至 `2.12.2`,LuckPerms API 升级至 `5.5`。
+
+## [1.0.0] - 2026-11-01
+
+### Added
+
+- 首个版本:按 LuckPerms 权限组 / 权限节点为 Tab 列表添加前缀与后缀。
+- 支持 `&0` ~ `&f`、`&k` ~ `&r` 颜色代码,`&#RRGGBB` 与 `&x&R&R&G&G&B&B` 十六进制颜色。
+- 支持 PlaceholderAPI 变量。
+- 支持 `priority` 优先级与默认兜底条目。
+- 定时刷新 Tab 名称,并提供 `/tabnameprefix reload` 重载命令。

@@ -1,8 +1,8 @@
 name: TabNamePrefix
-version: '1.0-SNAPSHOT'
+version: '${project.version}'
 description: "在 Tab 列表中为不同权限组的玩家显示可配置的前缀/后缀,支持颜色代码与 PlaceholderAPI 变量"
 main: com.buzizi.tabNamePrefix.TabNamePrefix
-api-version: '1.21'
+api-version: '1.16'
 load: POSTWORLD
 
 authors: [ buzizi ]

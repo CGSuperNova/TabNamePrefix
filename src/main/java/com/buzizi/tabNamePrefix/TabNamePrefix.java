@@ -36,7 +36,7 @@ public final class TabNamePrefix extends JavaPlugin implements CommandExecutor, 
         restartRefreshTask();
         tabManager.refreshAll();
 
-        getLogger().info("已启用 " + getPluginMeta().getDisplayName() + ",使用 /tabnameprefix reload 可重载配置。");
+        getLogger().info("已启用 " + getDescription().getFullName() + ",使用 /tabnameprefix reload 可重载配置。");
     }
 
     @Override
@@ -82,7 +82,7 @@ public final class TabNamePrefix extends JavaPlugin implements CommandExecutor, 
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0) {
             sender.sendMessage("");
-            sender.sendMessage("§e§lTabNamePrefix §7v" + getPluginMeta().getVersion());
+            sender.sendMessage("§e§lTabNamePrefix §7v" + getDescription().getVersion());
             sender.sendMessage("§7在 Tab 列表中为不同权限组的玩家显示前缀/后缀(支持颜色与 PlaceholderAPI)");
             sender.sendMessage("§7用法: §f/" + label + " reload §7- 重载配置");
             sender.sendMessage("");
