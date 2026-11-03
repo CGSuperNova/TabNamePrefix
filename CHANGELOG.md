@@ -7,6 +7,20 @@
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-11-02
+
+### Added
+
+- 集成 [bStats](https://bstats.org/) 匿名统计(插件 ID `35063`),新增 `write_mode`、
+  `placeholderapi`、`luckperms` 三个自定义图表,用于了解插件在不同服务端上的运行情况。
+- 新增 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md),说明随 jar 一起分发的 bStats 组件。
+
+### Changed
+
+- bStats 代码通过 `maven-shade-plugin` 重定位到 `com.buzizi.tabNamePrefix.bstats`,
+  避免与其他同样内置 bStats 的插件发生类冲突。
+- 项目版本号提升至 `2.0.1`。
+
 ## [2.0.0] - 2026-11-01
 
 ### Added

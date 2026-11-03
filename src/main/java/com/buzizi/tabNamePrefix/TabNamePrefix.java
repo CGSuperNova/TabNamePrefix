@@ -1,5 +1,7 @@
 package com.buzizi.tabNamePrefix;
 
+import org.bstats.bukkit.Metrics;
+import org.bstats.charts.SimplePie;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -18,8 +20,12 @@ import org.bukkit.scheduler.BukkitTask;
  */
 public final class TabNamePrefix extends JavaPlugin implements CommandExecutor, Listener {
 
+    /** bStats 插件 ID: https://bstats.org/what-is-my-plugin-id */
+    private static final int BSTATS_PLUGIN_ID = 35063;
+
     private TabManager tabManager;
     private BukkitTask refreshTask;
+    private Metrics metrics;
 
     @Override
     public void onEnable() {
@@ -35,8 +41,29 @@ public final class TabNamePrefix extends JavaPlugin implements CommandExecutor, 
 
         restartRefreshTask();
         tabManager.refreshAll();
+        setupMetrics();
 
         getLogger().info("已启用 " + getDescription().getFullName() + ",使用 /tabnameprefix reload 可重载配置。");
+    }
+
+    /**
+     * 初始化 bStats 匿名统计。
+     *
+     * <p>统计失败(例如离线环境或服务端过于特殊)时只记录一条警告,
+     * 不影响插件本身的任何功能。</p>
+     */
+    private void setupMetrics() {
+        try {
+            metrics = new Metrics(this, BSTATS_PLUGIN_ID);
+            metrics.addCustomChart(new SimplePie("write_mode",
+                    () -> tabManager.writeMode()));
+            metrics.addCustomChart(new SimplePie("placeholderapi",
+                    () -> tabManager.isPlaceholderApiAvailable() ? "Installed" : "Not installed"));
+            metrics.addCustomChart(new SimplePie("luckperms",
+                    () -> tabManager.isLuckPermsAvailable() ? "Installed" : "Not installed"));
+        } catch (Throwable throwable) {
+            getLogger().warning("bStats 统计初始化失败(不影响插件功能): " + throwable);
+        }
     }
 
     @Override

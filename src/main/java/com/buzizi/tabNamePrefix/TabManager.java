@@ -83,6 +83,21 @@ public final class TabManager {
         return entries.size();
     }
 
+    /** 当前使用的 Tab 名称写入方式(用于 bStats 自定义图表) */
+    public String writeMode() {
+        return listNameBridge.isAdventure() ? "Paper Adventure" : "Bukkit legacy";
+    }
+
+    /** PlaceholderAPI 是否可用(用于 bStats 自定义图表) */
+    public boolean isPlaceholderApiAvailable() {
+        return papiAvailable;
+    }
+
+    /** LuckPerms 是否可用(用于 bStats 自定义图表) */
+    public boolean isLuckPermsAvailable() {
+        return luckPermsAvailable;
+    }
+
     /** 为所有在线玩家刷新 Tab 名称 */
     public void refreshAll() {
         for (Player player : Bukkit.getOnlinePlayers()) {

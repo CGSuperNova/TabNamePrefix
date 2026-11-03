@@ -1,4 +1,10 @@
 # TabNamePrefix
+[![GitHub release](https://img.shields.io/github/v/release/CGSuperNova/TabNamePrefix)](https://github.com/CGSuperNova/TabNamePrefix/releases)
+[![License](https://img.shields.io/github/license/CGSuperNova/TabNamePrefix)](LICENSE)
+[![Paper API](https://img.shields.io/badge/Paper-1.16~26.2-blue)](https://papermc.io/)
+<p align="center">
+  <img src="assets/logo-256.png" width="220" alt="TabNamePrefix logo">
+</p>
 
 在 Tab（玩家列表）中为不同权限组 / 权限节点的玩家显示可配置的前缀与后缀。
 
@@ -69,6 +75,14 @@ entries:
 | `/tabnameprefix`(`/tabp`、`/tnp`) | 查看插件信息 | - |
 | `/tabnameprefix reload` | 重载配置并重新应用 | `tabnameprefix.reload`(默认 OP) |
 
+## 统计
+
+插件集成了 [bStats](https://bstats.org/) 匿名统计(插件 ID `35063`),会收集服务端版本、
+插件版本、Java 版本,以及 `write_mode` / `placeholderapi` / `luckperms` 等运行环境信息。
+统计数据不包含玩家名称、IP 或任何个人身份信息。
+
+如需关闭,编辑 `plugins/bStats/config.yml`,把 `enabled` 改为 `false` 即可(该设置对所有使用 bStats 的插件生效)。
+
 ## 构建
 
 需要 JDK 17 或更高版本(编译目标为 Java 8 字节码):
@@ -82,3 +96,7 @@ mvn clean package
 ## 许可证
 
 本项目使用 [MIT License](LICENSE)。
+
+发布包中内置的 bStats 组件的许可证与版权信息见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
+
+![bStats 统计](https://bstats.org/signatures/bukkit/TabNamePrefix.svg)
