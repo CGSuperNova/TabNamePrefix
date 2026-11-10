@@ -88,4 +88,64 @@ public final class TextUtil {
         matcher.appendTail(buffer);
         return buffer.toString();
     }
+
+    /**
+     * 去掉文本中的颜色代码(同时兼容 & 与 § 写法,含十六进制),返回纯文本。
+     * <p>用于排序时比较前缀 / 后缀的实际内容。</p>
+     */
+    public static String stripColors(String text) {
+        if (text == null || text.isEmpty()) {
+            return "";
+        }
+        String colored = colorize(text);
+        StringBuilder builder = new StringBuilder(colored.length());
+        int i = 0;
+        while (i < colored.length()) {
+            char c = colored.charAt(i);
+            if (c == COLOR_CHAR && i + 1 < colored.length()) {
+                char code = colored.charAt(i + 1);
+                if (code == 'x' || code == 'X') {
+                    // §x§R§R§G§G§B§B 共 14 个字符
+                    i += 14;
+                } else {
+                    i += 2;
+                }
+                continue;
+            }
+            builder.append(c);
+            i++;
+        }
+        return builder.toString();
+    }
+
+    /**
+     * 按字符数截断 § 文本,且不会把颜色代码截成一半。
+     * <p>Bukkit 的队伍前缀 / 后缀上限为 64 个字符。</p>
+     */
+    public static String truncate(String text, int maxLength) {
+        if (text == null) {
+            return "";
+        }
+        if (text.length() <= maxLength) {
+            return text;
+        }
+        StringBuilder builder = new StringBuilder(Math.min(text.length(), maxLength));
+        int i = 0;
+        while (i < text.length()) {
+            char c = text.charAt(i);
+            int chunk;
+            if (c == COLOR_CHAR && i + 1 < text.length()) {
+                char code = text.charAt(i + 1);
+                chunk = (code == 'x' || code == 'X') ? 14 : 2;
+            } else {
+                chunk = 1;
+            }
+            if (i + chunk > text.length() || builder.length() + chunk > maxLength) {
+                break;
+            }
+            builder.append(text, i, i + chunk);
+            i += chunk;
+        }
+        return builder.toString();
+    }
 }

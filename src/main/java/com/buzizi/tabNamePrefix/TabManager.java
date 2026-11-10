@@ -14,17 +14,21 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 /**
- * 核心管理器: 负责加载配置、解析玩家命中的条目并写入 Tab 名称。
+ * 核心管理器: 负责加载配置、解析玩家命中的条目,并写入 Tab 名称、
+ * 悬浮姓名牌与 Tab 列表排序。
  */
 public final class TabManager {
 
     /** LuckPerms 组缓存有效期(毫秒),避免高频刷新时频繁查询组数据 */
     private static final long GROUP_CACHE_TTL_MS = 5000L;
+    /** Bukkit 队伍前缀 / 后缀的字符上限 */
+    private static final int TEAM_TEXT_MAX = 64;
 
     private final TabNamePrefix plugin;
     private final List<TabEntry> entries = new ArrayList<TabEntry>();
@@ -33,7 +37,10 @@ public final class TabManager {
     private final Map<UUID, CachedGroups> groupCache = new HashMap<UUID, CachedGroups>();
     /** 跨版本写入兼容层:Paper 用 Adventure,Spigot 等退回 Bukkit 方法 */
     private final ListNameBridge listNameBridge = ListNameBridge.create();
+    /** 悬浮姓名牌 + Tab 排序 */
+    private final NametagSorter nametagSorter;
 
+    private FeatureSettings features = FeatureSettings.disabled();
     private String groupNodePrefix = "tabnameprefix.group.";
     private boolean enabled = true;
     private boolean papiAvailable;
@@ -41,7 +48,9 @@ public final class TabManager {
 
     public TabManager(TabNamePrefix plugin) {
         this.plugin = plugin;
+        this.nametagSorter = new NametagSorter(plugin);
         plugin.getLogger().info("Tab 名称写入方式: " + listNameBridge.describe());
+        plugin.getLogger().info("排序 / 姓名牌写入方式: " + nametagSorter.describe());
     }
 
     /** 重新读取配置文件并重建内部状态 */
@@ -73,10 +82,13 @@ public final class TabManager {
 
         papiAvailable = Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI");
         luckPermsAvailable = Bukkit.getPluginManager().isPluginEnabled("LuckPerms");
+        features = FeatureSettings.parse(config);
 
         plugin.getLogger().info("已加载 " + entries.size() + " 个显示条目"
                 + " | PlaceholderAPI: " + (papiAvailable ? "已安装" : "未安装")
                 + " | LuckPerms: " + (luckPermsAvailable ? "已安装" : "未安装"));
+        plugin.getLogger().info("悬浮姓名牌: " + (features.nametagEnabled() ? "开启" : "关闭")
+                + " | Tab 排序: " + features.sortRule().describe());
     }
 
     public int entryCount() {
@@ -98,53 +110,88 @@ public final class TabManager {
         return luckPermsAvailable;
     }
 
-    /** 为所有在线玩家刷新 Tab 名称 */
-    public void refreshAll() {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            apply(player);
-        }
+    /** 是否启用悬浮姓名牌(用于 bStats 自定义图表) */
+    public boolean isNametagEnabled() {
+        return features.nametagEnabled();
     }
 
-    /** 为单个玩家应用 Tab 名称(prefix + 玩家名 + suffix) */
-    public void apply(Player player) {
-        if (player == null || !player.isOnline()) {
-            return;
-        }
+    /** 当前排序模式(用于 bStats 自定义图表) */
+    public String sortingMode() {
+        SortRule rule = features.sortRule();
+        return rule.isEnabled() ? rule.mode().name().toLowerCase(Locale.ROOT) : "none";
+    }
+
+    /** 为所有在线玩家刷新 Tab 名称、姓名牌与排序 */
+    public void refreshAll() {
         if (!enabled) {
-            restore(player);
+            restoreAll();
             return;
         }
+        List<Player> online = new ArrayList<Player>(Bukkit.getOnlinePlayers());
+        List<PlayerData> data = new ArrayList<PlayerData>(online.size());
+        for (Player player : online) {
+            data.add(build(player));
+        }
+        for (PlayerData item : data) {
+            applyTabName(item);
+        }
+        nametagSorter.update(data, features);
+    }
 
+    /** 为单个玩家解析条目、PAPI 变量与各项文本 */
+    private PlayerData build(Player player) {
         TabEntry entry = resolve(player);
-        if (entry == null) {
-            // 没有命中任何条目 -> 还原默认名称
-            restore(player);
-            return;
+
+        String rawPrefix = entry == null ? "" : resolvePlaceholders(player, entry.prefix());
+        String rawSuffix = entry == null ? "" : resolvePlaceholders(player, entry.suffix());
+        String tabText = TextUtil.colorize(rawPrefix + player.getName() + rawSuffix);
+
+        String tagPrefix = "";
+        String tagSuffix = "";
+        if (features.nametagEnabled()) {
+            String nametagPrefixRaw = features.useEntryValues()
+                    ? rawPrefix : resolvePlaceholders(player, features.nametagPrefix());
+            String nametagSuffixRaw = features.useEntryValues()
+                    ? rawSuffix : resolvePlaceholders(player, features.nametagSuffix());
+            tagPrefix = TextUtil.truncate(TextUtil.colorize(nametagPrefixRaw), TEAM_TEXT_MAX);
+            tagSuffix = TextUtil.truncate(TextUtil.colorize(nametagSuffixRaw), TEAM_TEXT_MAX);
         }
 
-        String prefix = entry.prefix();
-        String suffix = entry.suffix();
-
-        if (papiAvailable) {
-            try {
-                prefix = PlaceholderAPI.setPlaceholders(player, prefix);
-                suffix = PlaceholderAPI.setPlaceholders(player, suffix);
-            } catch (Throwable ignored) {
-                // PlaceholderAPI 版本不兼容等异常时,保留原始文本
+        String sortValue = "";
+        String numericValue = "";
+        SortRule rule = features.sortRule();
+        if (rule.isEnabled()) {
+            if (rule.mode() == SortRule.Mode.NUMERIC) {
+                numericValue = resolvePlaceholders(player, rule.numericPlaceholder());
+            } else if (rule.mode() == SortRule.Mode.LIST) {
+                switch (rule.listSource()) {
+                    case PREFIX:
+                        sortValue = rawPrefix;
+                        break;
+                    case SUFFIX:
+                        sortValue = rawSuffix;
+                        break;
+                    default:
+                        sortValue = resolvePlaceholders(player, rule.listValue());
+                        break;
+                }
             }
         }
 
-        String text = TextUtil.colorize(prefix + player.getName() + suffix);
+        return new PlayerData(player, tabText, tagPrefix, tagSuffix, sortValue, numericValue);
+    }
 
-        String previous = applied.get(player.getUniqueId());
-        if (text.equals(previous)) {
+    private void applyTabName(PlayerData item) {
+        UUID id = item.player.getUniqueId();
+        String previous = applied.get(id);
+        if (item.tabText.equals(previous)) {
             return;
         }
-        if (listNameBridge.set(player, text)) {
-            applied.put(player.getUniqueId(), text);
+        if (listNameBridge.set(item.player, item.tabText)) {
+            applied.put(id, item.tabText);
         } else {
             // 写入失败时不缓存,下一轮刷新会重试
-            applied.remove(player.getUniqueId());
+            applied.remove(id);
         }
     }
 
@@ -155,12 +202,15 @@ public final class TabManager {
         }
     }
 
-    /** 还原所有在线玩家的 Tab 名称(插件禁用时调用) */
+    /** 还原所有在线玩家的 Tab 名称、姓名牌与排序(插件禁用时调用) */
     public void restoreAll() {
         for (Player player : Bukkit.getOnlinePlayers()) {
-            restore(player);
+            if (applied.remove(player.getUniqueId()) != null) {
+                listNameBridge.reset(player);
+            }
         }
         applied.clear();
+        nametagSorter.restoreAll();
     }
 
     /** 玩家退出时清理内部缓存 */
@@ -170,6 +220,7 @@ public final class TabManager {
         }
         applied.remove(player.getUniqueId());
         groupCache.remove(player.getUniqueId());
+        nametagSorter.forget(player);
     }
 
     /**
@@ -201,6 +252,21 @@ public final class TabManager {
         return best != null ? best : fallback;
     }
 
+    /** 解析文本中的 PlaceholderAPI 变量;未安装时原样返回 */
+    private String resolvePlaceholders(Player player, String text) {
+        if (text == null || text.isEmpty()) {
+            return "";
+        }
+        if (!papiAvailable) {
+            return text;
+        }
+        try {
+            return PlaceholderAPI.setPlaceholders(player, text);
+        } catch (Throwable ignored) {
+            return text;
+        }
+    }
+
     /** 通过 LuckPerms API 获取玩家所属的权限组名(含继承的组),带短时缓存 */
     private Set<String> lpGroupsOf(Player player) {
         long now = System.currentTimeMillis();
@@ -228,6 +294,30 @@ public final class TabManager {
 
         groupCache.put(player.getUniqueId(), new CachedGroups(now, groups));
         return groups;
+    }
+
+    /** 单个玩家本轮刷新所需的全部数据 */
+    static final class PlayerData {
+        final Player player;
+        /** 已转换颜色代码的 Tab 文本 */
+        final String tabText;
+        /** 已转换颜色代码的姓名牌前缀 / 后缀 */
+        final String tagPrefix;
+        final String tagSuffix;
+        /** 预设顺序排序时用于匹配的原始值 */
+        final String sortValue;
+        /** 数值排序时用于解析的原始值 */
+        final String numericValue;
+
+        PlayerData(Player player, String tabText, String tagPrefix, String tagSuffix,
+                   String sortValue, String numericValue) {
+            this.player = player;
+            this.tabText = tabText;
+            this.tagPrefix = tagPrefix;
+            this.tagSuffix = tagSuffix;
+            this.sortValue = sortValue;
+            this.numericValue = numericValue;
+        }
     }
 
     /** LuckPerms 组查询结果缓存(Java 8 环境下不能用 record,因此写成普通类) */

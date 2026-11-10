@@ -61,6 +61,10 @@ public final class TabNamePrefix extends JavaPlugin implements CommandExecutor, 
                     () -> tabManager.isPlaceholderApiAvailable() ? "Installed" : "Not installed"));
             metrics.addCustomChart(new SimplePie("luckperms",
                     () -> tabManager.isLuckPermsAvailable() ? "Installed" : "Not installed"));
+            metrics.addCustomChart(new SimplePie("nametag",
+                    () -> tabManager.isNametagEnabled() ? "Enabled" : "Disabled"));
+            metrics.addCustomChart(new SimplePie("sorting",
+                    () -> tabManager.sortingMode()));
         } catch (Throwable throwable) {
             getLogger().warning("bStats 统计初始化失败(不影响插件功能): " + throwable);
         }
@@ -94,7 +98,8 @@ public final class TabNamePrefix extends JavaPlugin implements CommandExecutor, 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerJoin(PlayerJoinEvent event) {
         if (tabManager != null) {
-            tabManager.apply(event.getPlayer());
+            // 需要同时刷新所有玩家,才能让新玩家正确插入排序队列
+            tabManager.refreshAll();
         }
     }
 
@@ -110,7 +115,7 @@ public final class TabNamePrefix extends JavaPlugin implements CommandExecutor, 
         if (args.length == 0) {
             sender.sendMessage("");
             sender.sendMessage("§e§lTabNamePrefix §7v" + getDescription().getVersion());
-            sender.sendMessage("§7在 Tab 列表中为不同权限组的玩家显示前缀/后缀(支持颜色与 PlaceholderAPI)");
+            sender.sendMessage("§7在 Tab 列表与悬浮姓名牌中显示前缀/后缀(支持颜色与 PlaceholderAPI)");
             sender.sendMessage("§7用法: §f/" + label + " reload §7- 重载配置");
             sender.sendMessage("");
             return true;

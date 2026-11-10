@@ -6,12 +6,22 @@
   <img src="assets/logo-256.png" width="220" alt="TabNamePrefix logo">
 </p>
 
-在 Tab（玩家列表）中为不同权限组 / 权限节点的玩家显示可配置的前缀与后缀。
+为 Tab（玩家列表）与玩家头顶的悬浮姓名牌显示可配置的前缀与后缀，并支持自定义 Tab 列表排序。
 
 ```text
 原版显示:  PlayerName
 配置后:    [VIP] PlayerName
 ```
+
+## 特性
+
+- **Tab 列表前后缀**：按 LuckPerms 权限组 / 权限节点匹配条目，支持优先级与兜底条目；
+- **悬浮姓名牌**：把前缀 / 后缀同步到玩家头顶的名字（也可单独配置，2.1.0+）；
+- **自定义排序**（2.1.0+）：
+  - `numeric`：按 PlaceholderAPI 数值变量排序，支持升序 / 降序；
+  - `list`：按预设固定顺序排序，取值来源支持前缀、后缀或变量；
+- 颜色代码（`&0`~`&f`、`&k`~`&r`）、十六进制颜色（`&#RRGGBB`、`&x&R&R&G&G&B&B`）与 PlaceholderAPI 变量；
+- 一份 jar 兼容 Paper / Spigot 1.16 ~ 26.2。
 
 ## 兼容性
 
@@ -24,10 +34,15 @@
 插件以 **Java 8 字节码** 发布,编译基线为 Spigot API 1.16.5,因此同一份 jar 可以同时运行在
 1.16 与 26.x 的服务端上。
 
-Tab 名称的写入方式会在运行时自动选择:
+写入方式会在运行时自动选择:
 
-- Paper:通过反射调用 Adventure 的 `playerListName(Component)`,十六进制颜色可以完整保留;
-- Spigot / 其它服务端:退回 Bukkit 的 `setPlayerListName(String)`,功能一致。
+- Tab 名称:Paper 使用 Adventure 的 `playerListName(Component)`（保留十六进制颜色）,
+  Spigot 退回 `setPlayerListName(String)`;
+- 姓名牌 / 排序:通过计分板队伍实现;Paper 1.21.9+ 还会额外使用官方
+  `Player#setPlayerListOrder(int)` 接口。
+
+> ⚠ **姓名牌与排序都会接管玩家的计分板队伍**。如果你同时使用了其它基于队伍实现
+> 彩色名字 / 碰撞规则 / 发光等功能的插件,可能会出现冲突;两者只能有一个生效。
 
 ## 安装
 
@@ -51,6 +66,38 @@ settings:
   # 未安装 LuckPerms 时,用该权限节点前缀 + 组名做回退匹配
   group-node-prefix: "tabnameprefix.group."
 
+  # 悬浮姓名牌(玩家头顶的名字)
+  nametag:
+    enabled: false
+    # true: 复用条目里的 prefix / suffix; false: 使用下面的单独配置
+    use-entry-values: true
+    prefix: ""
+    suffix: ""
+
+# Tab 列表排序
+sorting:
+  enabled: false
+  # none / numeric / list
+  mode: none
+
+  numeric:
+    placeholder: "%player_level%"
+    # true: 数值大的在前; false: 数值小的在前
+    descending: true
+
+  list:
+    # prefix / suffix / placeholder
+    source: placeholder
+    value: "%rank_rankname%"
+    order:
+      - "Diamond"
+      - "Gold"
+      - "Iron"
+      - "Copper"
+      - "Coal"
+    # 不在列表中的玩家: last / first
+    unmatched: last
+
 entries:
   owner:
     group: owner
@@ -68,6 +115,26 @@ entries:
 - `prefix` / `suffix` 支持 `&0`~`&f`、`&k`~`&r` 颜色代码、`&#RRGGBB` 十六进制颜色,
   以及 PlaceholderAPI 变量。
 
+### 悬浮姓名牌
+
+开启 `settings.nametag.enabled` 后,玩家头顶的名字会显示为「前缀 + 玩家名 + 后缀」。
+默认复用条目里的前后缀(`use-entry-values: true`),与 Tab 列表保持一致;
+也可以关掉复用,单独配置姓名牌的 `prefix` / `suffix`。
+
+姓名牌基于计分板队伍的前缀 / 后缀实现,队伍前缀上限为 64 个字符,超出部分会被安全截断。
+
+### 自定义排序
+
+- `mode: numeric`:用 `sorting.numeric.placeholder` 解析每个玩家的数值并按大小排序,
+  `descending` 控制大值还是小值在前;无法解析为数字的玩家排在最后。
+- `mode: list`:按 `sorting.list.order` 的顺序给玩家排序,越靠上的值越优先:
+  - `source: prefix` / `suffix`:取玩家命中条目的前缀 / 后缀(自动去除颜色代码后匹配);
+  - `source: placeholder`:使用 `sorting.list.value` 变量值匹配;
+  - 不在列表中的玩家由 `unmatched` 决定排在最前还是最后。
+
+排序同时写入队伍名(旧版本客户端按队伍名排序)与 Paper 1.21.9+ 的 `playerListOrder`,
+因此在支持的各版本上顺序保持一致。
+
 ## 命令与权限
 
 | 命令 | 说明 | 权限 |
@@ -78,8 +145,8 @@ entries:
 ## 统计
 
 插件集成了 [bStats](https://bstats.org/) 匿名统计(插件 ID `35063`),会收集服务端版本、
-插件版本、Java 版本,以及 `write_mode` / `placeholderapi` / `luckperms` 等运行环境信息。
-统计数据不包含玩家名称、IP 或任何个人身份信息。
+插件版本、Java 版本,以及 `write_mode` / `placeholderapi` / `luckperms` / `nametag` / `sorting`
+等运行环境信息。统计数据不包含玩家名称、IP 或任何个人身份信息。
 
 如需关闭,编辑 `plugins/bStats/config.yml`,把 `enabled` 改为 `false` 即可(该设置对所有使用 bStats 的插件生效)。
 

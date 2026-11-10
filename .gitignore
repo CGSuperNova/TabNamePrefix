@@ -33,3 +33,6 @@ bin/
 logs/
 .DS_Store
 Thumbs.db
+
+# 宣传贴（仅本地保留，不提交到仓库）
+/PROMO.md

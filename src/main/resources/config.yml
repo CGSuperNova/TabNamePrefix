@@ -1,13 +1,13 @@
 # ============================================================
 #  TabNamePrefix 配置文件
 #
-#  功能: 为 Tab 列表中的玩家名添加「前缀 + 玩家名 + 后缀」
+#  功能: 为 Tab 列表 / 玩家头顶的悬浮姓名牌添加「前缀 + 玩家名 + 后缀」
 #  示例:
 #    原版显示:  PlayerName
 #    配置后:    [VIP] PlayerName
 # ============================================================
 
-# 总开关,设为 false 时插件不会修改任何玩家的 Tab 名称
+# 总开关,设为 false 时插件不会修改任何玩家的 Tab 名称、姓名牌或排序
 enabled: true
 
 settings:
@@ -21,6 +21,73 @@ settings:
   # 例如将 tabnameprefix.group.vip 权限授予 VIP 组即可命中下方 vip 条目。
   # 这样即使不装 LuckPerms,也能通过任意权限插件按组区分。
   group-node-prefix: "tabnameprefix.group."
+
+  # ==========================================================
+  #  悬浮姓名牌(玩家头顶的名字)
+  #
+  #  实现方式: Minecraft 的悬浮名字由计分板队伍(scoreboard team)的
+  #  prefix / suffix 控制,因此本功能会为每个玩家创建并接管一个队伍。
+  #
+  #  ⚠ 注意:启用后会接管玩家所在的队伍,与其它「使用队伍实现彩色名字 /
+  #    碰撞规则 / 发光」的插件可能冲突;如有冲突请关闭该功能。
+  # ==========================================================
+  nametag:
+    # 是否同时修改玩家头顶的悬浮姓名牌
+    enabled: false
+
+    # true : 直接复用下方 entries 中该玩家命中条目的 prefix / suffix(与 Tab 列表一致)
+    # false: 使用下面单独配置的 prefix / suffix
+    use-entry-values: true
+
+    # use-entry-values 为 false 时生效,支持颜色代码与 PlaceholderAPI 变量
+    prefix: ""
+    suffix: ""
+
+# ============================================================
+#  Tab 列表排序
+#
+#  enabled 为 false 时不改变玩家顺序(保持客户端默认的按名字排序)。
+#  注意:排序同样基于计分板队伍名实现(旧版本客户端按队伍名排序),
+#  因此在 Paper 1.21.9+ 上还会额外使用官方 playerListOrder 接口。
+# ============================================================
+sorting:
+  enabled: false
+
+  # 排序模式:
+  #   none    - 不排序(保持默认按玩家名排序)
+  #   numeric - 按数值变量排序
+  #   list    - 按预设的固定顺序排序
+  mode: none
+
+  # ---------- mode: numeric ----------
+  numeric:
+    # 数值来源(PlaceholderAPI 变量),无法解析为数字的玩家会排在最后
+    placeholder: "%player_level%"
+    # true : 数值大的排前面(降序)
+    # false: 数值小的排前面(升序)
+    descending: true
+
+  # ---------- mode: list ----------
+  list:
+    # 取值来源:
+    #   prefix      - 取玩家命中条目的前缀(自动去除颜色代码后匹配)
+    #   suffix      - 取玩家命中条目的后缀(自动去除颜色代码后匹配)
+    #   placeholder - 使用下方 value 作为变量模板
+    source: placeholder
+
+    # source 为 placeholder 时使用,例如 %rank_rankname% 会解析为 Coal / Copper / ...
+    value: "%rank_rankname%"
+
+    # 预设顺序:越靠上的值排序越优先(大小写不敏感,忽略颜色代码)
+    order:
+      - "Diamond"
+      - "Gold"
+      - "Iron"
+      - "Copper"
+      - "Coal"
+
+    # 不在 order 列表中的玩家排在哪里: last(最后) / first(最前)
+    unmatched: last
 
 # ============================================================
 #  条目列表(从上到下依次解析)
