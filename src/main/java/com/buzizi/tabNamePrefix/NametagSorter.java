@@ -1,6 +1,7 @@
 package com.buzizi.tabNamePrefix;
 
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
@@ -40,6 +41,7 @@ final class NametagSorter {
 
     private final TabNamePrefix plugin;
     private final TeamTextBridge teamTextBridge = TeamTextBridge.create();
+    private final PlayerNameBridge playerNameBridge = PlayerNameBridge.create();
     private final PlayerListOrderBridge orderBridge = PlayerListOrderBridge.create();
 
     private final Map<UUID, TeamState> applied = new HashMap<UUID, TeamState>();
@@ -54,7 +56,13 @@ final class NametagSorter {
     /** 供启动日志展示当前使用的写入方式 */
     String describe() {
         return orderBridge.describe() + " + "
-                + (teamTextBridge.isAdventure() ? "Adventure 队伍文本" : "传统队伍文本");
+                + (teamTextBridge.isAdventure() ? "Adventure 队伍文本" : "传统队伍文本")
+                + " + " + playerNameBridge.describe();
+    }
+
+    /** 读取玩家当前的列表顺序(用于调试) */
+    int orderOf(Player player) {
+        return orderBridge.get(player);
     }
 
     /**
@@ -114,8 +122,10 @@ final class NametagSorter {
             String teamName = TEAM_NAME_PREFIX + pad(i, width);
             String prefix = nametag ? TextUtil.truncate(item.tagPrefix, TEAM_TEXT_MAX) : "";
             String suffix = nametag ? TextUtil.truncate(item.tagSuffix, TEAM_TEXT_MAX) : "";
+            String customName = nametag ? item.customName : null;
+            int colorRgb = nametag ? item.nameRgb : -1;
             try {
-                apply(board, item.player, i, teamName, prefix, suffix);
+                apply(board, item.player, i, teamName, prefix, suffix, customName, colorRgb);
             } catch (Throwable throwable) {
                 if (!warned) {
                     warned = true;
@@ -128,8 +138,9 @@ final class NametagSorter {
         appliedRanks.putAll(ranks);
     }
 
-    /** 把某个玩家写入对应的队伍,并设置其列表顺序 */
-    private void apply(Scoreboard board, Player player, int rank, String teamName, String prefix, String suffix) {
+    /** 把某个玩家写入对应的队伍,并设置其列表顺序、头顶颜色与文本 */
+    private void apply(Scoreboard board, Player player, int rank, String teamName, String prefix, String suffix,
+                       String customName, int colorRgb) {
         UUID id = player.getUniqueId();
         String name = player.getName();
         TeamState state = applied.get(id);
@@ -168,10 +179,43 @@ final class NametagSorter {
             }
         }
 
+        if (playerNameBridge.isSupported() && !equalText(state.customName, customName)) {
+            boolean ok = customName == null
+                    ? playerNameBridge.reset(player)
+                    : playerNameBridge.set(player, customName);
+            if (ok) {
+                state.customName = customName;
+            }
+        }
+
+        if (state.colorRgb != colorRgb) {
+            Team team = board.getTeam(teamName);
+            if (team != null) {
+                applyTeamColor(team, colorRgb);
+                state.colorRgb = colorRgb;
+            }
+        }
+
         if (state.rank != rank) {
             orderBridge.set(player, rank + 1);
             state.rank = rank;
         }
+    }
+
+    /** 名称颜色退化到 16 色队伍颜色(作为自定义名称不可用时的兜底) */
+    @SuppressWarnings("deprecation")
+    private void applyTeamColor(Team team, int colorRgb) {
+        if (colorRgb < 0) {
+            team.setColor(ChatColor.RESET);
+            return;
+        }
+        char code = TextUtil.legacyColorChar(TextUtil.nearestLegacyColor(colorRgb));
+        ChatColor color = ChatColor.getByChar(code);
+        team.setColor(color == null ? ChatColor.RESET : color);
+    }
+
+    private static boolean equalText(String first, String second) {
+        return first == null ? second == null : first.equals(second);
     }
 
     private void removeEntry(Scoreboard board, TeamState state) {
@@ -230,6 +274,9 @@ final class NametagSorter {
             return;
         }
         orderBridge.reset(player);
+        if (playerNameBridge.isSupported()) {
+            playerNameBridge.reset(player);
+        }
         String previous = previousTeams.get(id);
         if (board != null && previous != null && !previous.isEmpty()) {
             Team prev = board.getTeam(previous);
@@ -271,6 +318,8 @@ final class NametagSorter {
         private final String entryName;
         private String prefix = "";
         private String suffix = "";
+        private String customName;
+        private int colorRgb = -1;
         private int rank = -1;
 
         private TeamState(String teamName, String entryName) {

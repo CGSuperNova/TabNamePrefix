@@ -5,9 +5,12 @@ import net.luckperms.api.LuckPermsProvider;
 import net.luckperms.api.model.group.Group;
 import net.luckperms.api.model.user.User;
 import org.bukkit.Bukkit;
+import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.Team;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -89,6 +92,23 @@ public final class TabManager {
                 + " | LuckPerms: " + (luckPermsAvailable ? "已安装" : "未安装"));
         plugin.getLogger().info("悬浮姓名牌: " + (features.nametagEnabled() ? "开启" : "关闭")
                 + " | Tab 排序: " + features.sortRule().describe());
+        plugin.getLogger().info("名称渐变颜色: " + features.nameColorRule().describe());
+
+        List<String> missing = new ArrayList<String>();
+        if (!config.isSet("settings.nametag")) {
+            missing.add("settings.nametag");
+        }
+        if (!config.isSet("settings.name-color")) {
+            missing.add("settings.name-color");
+        }
+        if (!config.isSet("sorting")) {
+            missing.add("sorting");
+        }
+        if (!missing.isEmpty()) {
+            plugin.getLogger().warning("当前 config.yml 缺少配置块: " + String.join(", ", missing)
+                    + "(通常是旧版本配置文件)。请参考 README 补全,否则对应功能会保持关闭;"
+                    + "可用 /tabnameprefix debug 查看当前生效状态。");
+        }
     }
 
     public int entryCount() {
@@ -121,6 +141,11 @@ public final class TabManager {
         return rule.isEnabled() ? rule.mode().name().toLowerCase(Locale.ROOT) : "none";
     }
 
+    /** 是否启用名称渐变颜色(用于 bStats 自定义图表) */
+    public boolean isNameColorEnabled() {
+        return features.nameColorRule().isEnabled();
+    }
+
     /** 为所有在线玩家刷新 Tab 名称、姓名牌与排序 */
     public void refreshAll() {
         if (!enabled) {
@@ -144,7 +169,26 @@ public final class TabManager {
 
         String rawPrefix = entry == null ? "" : resolvePlaceholders(player, entry.prefix());
         String rawSuffix = entry == null ? "" : resolvePlaceholders(player, entry.suffix());
-        String tabText = TextUtil.colorize(rawPrefix + player.getName() + rawSuffix);
+
+        NameColorRule colorRule = features.nameColorRule();
+        String nameColorCode = "";
+        int nameRgb = -1;
+        if (colorRule.isEnabled()) {
+            double ratio = colorRule.ratioOf(resolvePlaceholders(player, colorRule.placeholder()));
+            if (ratio >= 0.0D) {
+                nameRgb = colorRule.colorAt(ratio);
+                nameColorCode = TextUtil.legacyHex(nameRgb);
+            }
+        }
+
+        String tabText;
+        if (nameColorCode.isEmpty()) {
+            tabText = TextUtil.colorize(rawPrefix + player.getName() + rawSuffix);
+        } else {
+            // 只给玩家名单独着色,前缀 / 后缀自身的颜色保持不变
+            tabText = TextUtil.colorize(rawPrefix) + nameColorCode + player.getName()
+                    + TextUtil.colorize(rawSuffix);
+        }
 
         String tagPrefix = "";
         String tagSuffix = "";
@@ -155,6 +199,16 @@ public final class TabManager {
                     ? rawSuffix : resolvePlaceholders(player, features.nametagSuffix());
             tagPrefix = TextUtil.truncate(TextUtil.colorize(nametagPrefixRaw), TEAM_TEXT_MAX);
             tagSuffix = TextUtil.truncate(TextUtil.colorize(nametagSuffixRaw), TEAM_TEXT_MAX);
+        }
+
+        // 姓名牌优先使用自定义名称:部分客户端/版本不会把队伍前缀显示在头顶,
+        // 自定义名称可以完整控制头顶文本;队伍前缀 / 后缀仍然保留作为兜底。
+        String customName = null;
+        if (features.nametagEnabled()) {
+            String coloredName = nameColorCode.isEmpty()
+                    ? player.getName()
+                    : nameColorCode + player.getName();
+            customName = tagPrefix + coloredName + tagSuffix;
         }
 
         String sortValue = "";
@@ -178,7 +232,8 @@ public final class TabManager {
             }
         }
 
-        return new PlayerData(player, tabText, tagPrefix, tagSuffix, sortValue, numericValue);
+        return new PlayerData(player, tabText, tagPrefix, tagSuffix, sortValue, numericValue,
+                nameRgb, customName);
     }
 
     private void applyTabName(PlayerData item) {
@@ -221,6 +276,43 @@ public final class TabManager {
         applied.remove(player.getUniqueId());
         groupCache.remove(player.getUniqueId());
         nametagSorter.forget(player);
+    }
+
+    /** 输出当前生效的配置与每个玩家的实际写入状态,便于排查姓名牌问题 */
+    @SuppressWarnings("deprecation")
+    public void debug(CommandSender sender) {
+        sender.sendMessage("§e§lTabNamePrefix 调试信息");
+        sender.sendMessage("§7版本 §f" + plugin.getDescription().getVersion()
+                + " §7| Tab 写入 §f" + writeMode()
+                + " §7| 姓名牌/排序写入 §f" + nametagSorter.describe());
+        sender.sendMessage("§7姓名牌 " + (features.nametagEnabled() ? "§a开启" : "§c关闭")
+                + " §7| 排序 §f" + features.sortRule().describe()
+                + " §7| 名称颜色 §f" + features.nameColorRule().describe());
+
+        Scoreboard board = Bukkit.getScoreboardManager() == null
+                ? null : Bukkit.getScoreboardManager().getMainScoreboard();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            PlayerData data = build(player);
+            sender.sendMessage("§e" + player.getName());
+            sender.sendMessage("  §7Tab 文本: §f" + visible(data.tabText));
+            Team team = board == null ? null : board.getEntryTeam(player.getName());
+            if (team == null) {
+                sender.sendMessage("  §7队伍: §c未加入(姓名牌 / 排序未生效)");
+            } else {
+                sender.sendMessage("  §7队伍: §f" + team.getName()
+                        + " §7前缀: §f" + visible(team.getPrefix())
+                        + " §7后缀: §f" + visible(team.getSuffix()));
+            }
+            sender.sendMessage("  §7自定义名称: §f"
+                    + (data.customName == null ? "§c未设置" : visible(data.customName)));
+            sender.sendMessage("  §7名称颜色: §f"
+                    + (data.nameRgb < 0 ? "默认" : String.format("#%06X", data.nameRgb))
+                    + " §7| 列表顺序: §f" + nametagSorter.orderOf(player));
+        }
+    }
+
+    private static String visible(String text) {
+        return text == null ? "" : text.replace('\u00A7', '&');
     }
 
     /**
@@ -308,15 +400,21 @@ public final class TabManager {
         final String sortValue;
         /** 数值排序时用于解析的原始值 */
         final String numericValue;
+        /** 名称渐变颜色对应的 RGB, -1 表示未启用 / 无法解析 */
+        final int nameRgb;
+        /** 头顶自定义名称文本(含颜色), null 表示不设置 */
+        final String customName;
 
         PlayerData(Player player, String tabText, String tagPrefix, String tagSuffix,
-                   String sortValue, String numericValue) {
+                   String sortValue, String numericValue, int nameRgb, String customName) {
             this.player = player;
             this.tabText = tabText;
             this.tagPrefix = tagPrefix;
             this.tagSuffix = tagSuffix;
             this.sortValue = sortValue;
             this.numericValue = numericValue;
+            this.nameRgb = nameRgb;
+            this.customName = customName;
         }
     }
 

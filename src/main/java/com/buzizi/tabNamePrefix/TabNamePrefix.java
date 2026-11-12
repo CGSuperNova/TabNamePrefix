@@ -65,6 +65,8 @@ public final class TabNamePrefix extends JavaPlugin implements CommandExecutor, 
                     () -> tabManager.isNametagEnabled() ? "Enabled" : "Disabled"));
             metrics.addCustomChart(new SimplePie("sorting",
                     () -> tabManager.sortingMode()));
+            metrics.addCustomChart(new SimplePie("name_color",
+                    () -> tabManager.isNameColorEnabled() ? "Enabled" : "Disabled"));
         } catch (Throwable throwable) {
             getLogger().warning("bStats 统计初始化失败(不影响插件功能): " + throwable);
         }
@@ -116,8 +118,20 @@ public final class TabNamePrefix extends JavaPlugin implements CommandExecutor, 
             sender.sendMessage("");
             sender.sendMessage("§e§lTabNamePrefix §7v" + getDescription().getVersion());
             sender.sendMessage("§7在 Tab 列表与悬浮姓名牌中显示前缀/后缀(支持颜色与 PlaceholderAPI)");
+            sender.sendMessage("§7姓名牌: " + (tabManager.isNametagEnabled() ? "§a开启" : "§c关闭")
+                    + " §7| 名称颜色: " + (tabManager.isNameColorEnabled() ? "§a开启" : "§c关闭"));
             sender.sendMessage("§7用法: §f/" + label + " reload §7- 重载配置");
+            sender.sendMessage("§7      §f/" + label + " debug §7- 查看每个玩家的实际写入状态");
             sender.sendMessage("");
+            return true;
+        }
+
+        if (args[0].equalsIgnoreCase("debug")) {
+            if (!sender.hasPermission("tabnameprefix.debug")) {
+                sender.sendMessage("§c你没有执行该命令的权限(需要 tabnameprefix.debug)");
+                return true;
+            }
+            tabManager.debug(sender);
             return true;
         }
 
@@ -133,7 +147,7 @@ public final class TabNamePrefix extends JavaPlugin implements CommandExecutor, 
             return true;
         }
 
-        sender.sendMessage("§c未知子命令: §f" + args[0] + " §c(可用: reload)");
+        sender.sendMessage("§c未知子命令: §f" + args[0] + " §c(可用: reload, debug)");
         return true;
     }
 }

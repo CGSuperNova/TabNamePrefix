@@ -6,7 +6,8 @@
   <img src="assets/logo-256.png" width="220" alt="TabNamePrefix logo">
 </p>
 
-为 Tab（玩家列表）与玩家头顶的悬浮姓名牌显示可配置的前缀与后缀，并支持自定义 Tab 列表排序。
+为 Tab（玩家列表）与玩家头顶的悬浮姓名牌显示可配置的前缀与后缀，支持自定义 Tab 列表排序，
+并可根据数值变量为玩家名字生成渐变颜色。
 
 ```text
 原版显示:  PlayerName
@@ -17,6 +18,7 @@
 
 - **Tab 列表前后缀**：按 LuckPerms 权限组 / 权限节点匹配条目，支持优先级与兜底条目；
 - **悬浮姓名牌**：把前缀 / 后缀同步到玩家头顶的名字（也可单独配置，2.1.0+）；
+- **名称渐变颜色**（2.1.1+）：读取数值变量，在最小 / 最大颜色之间插值出玩家名字颜色，支持十六进制；
 - **自定义排序**（2.1.0+）：
   - `numeric`：按 PlaceholderAPI 数值变量排序，支持升序 / 降序；
   - `list`：按预设固定顺序排序，取值来源支持前缀、后缀或变量；
@@ -74,6 +76,15 @@ settings:
     prefix: ""
     suffix: ""
 
+  # 名称渐变颜色(2.1.1+)
+  name-color:
+    enabled: false
+    placeholder: "%player_health%"
+    min-value: 0
+    max-value: 20
+    min-color: "&c"
+    max-color: "&a"
+
 # Tab 列表排序
 sorting:
   enabled: false
@@ -123,6 +134,36 @@ entries:
 
 姓名牌基于计分板队伍的前缀 / 后缀实现,队伍前缀上限为 64 个字符,超出部分会被安全截断。
 
+2.1.2 起,插件还会把「前缀 + 名字 + 后缀」写入玩家的自定义名称(CustomName),
+这样即使某些客户端 / 服务端版本不显示队伍前缀,头顶名字也能正确变化;队伍前缀仍然保留作为兜底。
+
+如果开启后头顶仍然没有变化,请执行 `/tabnameprefix debug`:
+
+- 输出中 `姓名牌 开启` 表示配置已生效;
+- 每个玩家的 `队伍前缀` / `自定义名称` 应能看到你的前后缀;
+- 若 `姓名牌 关闭`,说明 `settings.nametag.enabled` 没有设为 `true`,或使用的是旧版配置文件(缺少该配置块)。
+
+### 名称渐变颜色（2.1.1+）
+
+读取一个数值型变量,根据它相对最小值 / 最大值的位置,在两种颜色之间做线性插值:
+
+```yaml
+settings:
+  name-color:
+    enabled: true
+    placeholder: "%player_health%"
+    min-value: 0        # 0 点血对应...
+    max-value: 20       # 20 点血对应...
+    min-color: "&c"     # ...红色
+    max-color: "&a"     # ...绿色
+```
+
+- 血量 4 → 偏红,10 → 偏黄,16 → 偏绿;
+- 颜色支持 `&c`、`#FF5555` / `&#FF5555` 与 `red` / `green` 等颜色名;
+- 数值超出范围会自动钳制到两端颜色,变量无法解析为数字时保持默认颜色;
+- **Tab 列表使用精确的十六进制颜色**;头顶姓名牌需要同时开启 `settings.nametag`,
+  会通过玩家自定义名称同步同一颜色(队伍颜色提供 16 色兜底)。
+
 ### 自定义排序
 
 - `mode: numeric`:用 `sorting.numeric.placeholder` 解析每个玩家的数值并按大小排序,
@@ -141,12 +182,13 @@ entries:
 | --- | --- | --- |
 | `/tabnameprefix`(`/tabp`、`/tnp`) | 查看插件信息 | - |
 | `/tabnameprefix reload` | 重载配置并重新应用 | `tabnameprefix.reload`(默认 OP) |
+| `/tabnameprefix debug` | 查看每个玩家实际写入的 Tab 文本、队伍前缀、自定义名称与排序 | `tabnameprefix.debug`(默认 OP) |
 
 ## 统计
 
 插件集成了 [bStats](https://bstats.org/) 匿名统计(插件 ID `35063`),会收集服务端版本、
-插件版本、Java 版本,以及 `write_mode` / `placeholderapi` / `luckperms` / `nametag` / `sorting`
-等运行环境信息。统计数据不包含玩家名称、IP 或任何个人身份信息。
+插件版本、Java 版本,以及 `write_mode` / `placeholderapi` / `luckperms` / `nametag` /
+`sorting` / `name_color` 等运行环境信息。统计数据不包含玩家名称、IP 或任何个人身份信息。
 
 如需关闭,编辑 `plugins/bStats/config.yml`,把 `enabled` 改为 `false` 即可(该设置对所有使用 bStats 的插件生效)。
 

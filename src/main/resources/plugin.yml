@@ -1,6 +1,6 @@
 name: TabNamePrefix
 version: '${project.version}'
-description: "在 Tab 列表与悬浮姓名牌中显示可配置的前缀/后缀,并支持自定义排序 (支持颜色代码与 PlaceholderAPI 变量)"
+description: "在 Tab 列表与悬浮姓名牌中显示可配置的前缀/后缀,支持自定义排序与名称渐变颜色 (支持颜色代码与 PlaceholderAPI 变量)"
 main: com.buzizi.tabNamePrefix.TabNamePrefix
 api-version: '1.16'
 load: POSTWORLD
@@ -18,4 +18,7 @@ commands:
 permissions:
   tabnameprefix.reload:
     description: "允许执行 /tabnameprefix reload"
+    default: op
+  tabnameprefix.debug:
+    description: "允许执行 /tabnameprefix debug"
     default: op
